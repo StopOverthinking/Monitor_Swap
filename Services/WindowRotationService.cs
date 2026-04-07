@@ -12,6 +12,8 @@ namespace MonitorSwap.Services
 {
     internal sealed class WindowRotationService
     {
+        private readonly MonitorDisplayService _monitorDisplayService = new MonitorDisplayService();
+
         private static readonly HashSet<string> ExcludedWindowClasses = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "Progman",
@@ -27,7 +29,7 @@ namespace MonitorSwap.Services
         {
             settings.EnsureDefaults();
 
-            var includedScreens = GetIncludedScreens(settings).ToList();
+            var includedScreens = GetIncludedScreens(settings);
             if (includedScreens.Count < 2)
             {
                 return RotationResult.Failed("Select at least two monitors to rotate windows.");
@@ -69,13 +71,14 @@ namespace MonitorSwap.Services
                     direction == RotationDirection.Left ? "left" : "right"));
         }
 
-        private static IEnumerable<Screen> GetIncludedScreens(AppSettings settings)
+        private List<Screen> GetIncludedScreens(AppSettings settings)
         {
-            var selectedNames = new HashSet<string>(settings.IncludedMonitorDeviceNames, StringComparer.OrdinalIgnoreCase);
-            return Screen.AllScreens
-                .Where(screen => selectedNames.Contains(screen.DeviceName))
+            return _monitorDisplayService
+                .ResolveSelectedMonitors(settings.IncludedMonitorIds, settings.IncludedMonitorDeviceNames)
+                .Select(monitor => monitor.Screen)
                 .OrderBy(screen => screen.Bounds.Left)
-                .ThenBy(screen => screen.Bounds.Top);
+                .ThenBy(screen => screen.Bounds.Top)
+                .ToList();
         }
 
         private static IDictionary<string, Screen> BuildScreenRotationMap(IReadOnlyList<Screen> screens, RotationDirection direction)
@@ -277,7 +280,6 @@ namespace MonitorSwap.Services
             var placement = window.Placement;
             placement.length = System.Runtime.InteropServices.Marshal.SizeOf(typeof(WINDOWPLACEMENT));
             placement.rcNormalPosition = NativeMethods.FromRectangle(normalTargetRectangle);
-
             if (window.IsMinimized)
             {
                 return NativeMethods.SetWindowPlacement(window.Handle, ref placement);

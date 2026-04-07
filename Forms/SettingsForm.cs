@@ -215,7 +215,7 @@ namespace MonitorSwap.Forms
             root.Controls.Add(buttonPanel, 0, 5);
 
             _captureStatusState = CaptureStatusState.Default;
-            PopulateMonitorList(_settings.IncludedMonitorDeviceNames);
+            PopulateMonitorList(GetStoredMonitorSelections());
             RefreshHotkeyDisplay();
             AppLocalization.LanguageChanged += OnApplicationLanguageChanged;
             SelectLanguage(_settings.GetUiLanguage());
@@ -421,26 +421,33 @@ namespace MonitorSwap.Forms
 
         private void RefreshMonitorLabels()
         {
-            var checkedDevices = _monitorList.CheckedItems.Cast<MonitorItem>().Select(item => item.DeviceName).ToList();
-            PopulateMonitorList(checkedDevices.Count > 0 ? checkedDevices : _settings.IncludedMonitorDeviceNames);
+            var checkedMonitorIds = _monitorList.CheckedItems.Cast<MonitorItem>().Select(item => item.Id).ToList();
+            PopulateMonitorList(checkedMonitorIds.Count > 0 ? checkedMonitorIds : GetStoredMonitorSelections());
         }
 
-        private void PopulateMonitorList(IEnumerable<string> checkedDeviceNames)
+        private IEnumerable<string> GetStoredMonitorSelections()
         {
-            var checkedSet = new HashSet<string>(checkedDeviceNames ?? Enumerable.Empty<string>());
+            return (_settings.IncludedMonitorIds ?? Enumerable.Empty<string>())
+                .Concat(_settings.IncludedMonitorDeviceNames ?? Enumerable.Empty<string>())
+                .Where(selection => !string.IsNullOrWhiteSpace(selection))
+                .Distinct(StringComparer.OrdinalIgnoreCase);
+        }
+
+        private void PopulateMonitorList(IEnumerable<string> checkedMonitorIds)
+        {
+            var checkedSet = new HashSet<string>(
+                checkedMonitorIds ?? Enumerable.Empty<string>(),
+                StringComparer.OrdinalIgnoreCase);
             _monitorList.BeginUpdate();
             try
             {
                 _monitorList.Items.Clear();
-                var friendlyNames = _monitorDisplayService.GetFriendlyNames();
-                var screens = Screen.AllScreens.OrderBy(screen => screen.Bounds.Left).ThenBy(screen => screen.Bounds.Top);
-                foreach (var screen in screens)
+                var monitors = _monitorDisplayService.GetMonitorInfos();
+                foreach (var monitor in monitors)
                 {
-                    string friendlyName;
-                    friendlyNames.TryGetValue(screen.DeviceName, out friendlyName);
-                    var label = BuildMonitorLabel(screen, friendlyName);
-                    var isChecked = checkedSet.Contains(screen.DeviceName);
-                    _monitorList.Items.Add(new MonitorItem(screen.DeviceName, label), isChecked);
+                    var label = BuildMonitorLabel(monitor.Screen, monitor.FriendlyName);
+                    var isChecked = checkedSet.Contains(monitor.Id) || checkedSet.Contains(monitor.DeviceName);
+                    _monitorList.Items.Add(new MonitorItem(monitor.Id, monitor.DeviceName, label), isChecked);
                 }
             }
             finally
@@ -486,7 +493,7 @@ namespace MonitorSwap.Forms
 
         private void OnSaveClicked(object sender, EventArgs e)
         {
-            var selectedMonitors = _monitorList.CheckedItems.Cast<MonitorItem>().Select(item => item.DeviceName).ToList();
+            var selectedMonitors = _monitorList.CheckedItems.Cast<MonitorItem>().Select(item => item.Id).ToList();
             if (selectedMonitors.Count == 0)
             {
                 MessageBox.Show(
@@ -512,18 +519,22 @@ namespace MonitorSwap.Forms
             _settings.IncludeMinimizedWindows = _includeMinimizedCheckBox.Checked;
             _settings.StartWithWindows = _startWithWindowsCheckBox.Checked;
             _settings.PreserveWindowOrder = _preserveOrderCheckBox.Checked;
-            _settings.IncludedMonitorDeviceNames = selectedMonitors;
+            _settings.IncludedMonitorIds = selectedMonitors;
+            _settings.IncludedMonitorDeviceNames = new List<string>();
             _settings.SetUiLanguage(GetSelectedLanguage());
             DialogResult = DialogResult.OK;
         }
 
         private sealed class MonitorItem
         {
-            public MonitorItem(string deviceName, string description)
+            public MonitorItem(string id, string deviceName, string description)
             {
+                Id = id;
                 DeviceName = deviceName;
                 Description = description;
             }
+
+            public string Id { get; private set; }
 
             public string DeviceName { get; private set; }
 

@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Linq;
 using System.Runtime.Serialization;
 using System.Windows.Forms;
 
@@ -10,6 +9,7 @@ namespace MonitorSwap.Models
     {
         public AppSettings()
         {
+            IncludedMonitorIds = new List<string>();
             IncludedMonitorDeviceNames = new List<string>();
             RotateLeftHotkey = HotkeyBinding.CreateDefault(Keys.Left);
             RotateRightHotkey = HotkeyBinding.CreateDefault(Keys.Right);
@@ -29,6 +29,9 @@ namespace MonitorSwap.Models
         public string UiLanguageCode { get; set; }
 
         [DataMember]
+        public List<string> IncludedMonitorIds { get; set; }
+
+        [DataMember]
         public List<string> IncludedMonitorDeviceNames { get; set; }
 
         [DataMember]
@@ -39,14 +42,10 @@ namespace MonitorSwap.Models
 
         public void EnsureDefaults()
         {
+            IncludedMonitorIds = IncludedMonitorIds ?? new List<string>();
             IncludedMonitorDeviceNames = IncludedMonitorDeviceNames ?? new List<string>();
             RotateLeftHotkey = RotateLeftHotkey ?? HotkeyBinding.CreateDefault(Keys.Left);
             RotateRightHotkey = RotateRightHotkey ?? HotkeyBinding.CreateDefault(Keys.Right);
-
-            if (IncludedMonitorDeviceNames.Count == 0)
-            {
-                IncludedMonitorDeviceNames = Screen.AllScreens.Select(screen => screen.DeviceName).ToList();
-            }
         }
 
         public AppSettings Clone()
@@ -57,6 +56,7 @@ namespace MonitorSwap.Models
                 StartWithWindows = StartWithWindows,
                 PreserveWindowOrder = PreserveWindowOrder,
                 UiLanguageCode = UiLanguageCode,
+                IncludedMonitorIds = new List<string>(IncludedMonitorIds ?? new List<string>()),
                 IncludedMonitorDeviceNames = new List<string>(IncludedMonitorDeviceNames ?? new List<string>()),
                 RotateLeftHotkey = RotateLeftHotkey != null ? RotateLeftHotkey.Clone() : null,
                 RotateRightHotkey = RotateRightHotkey != null ? RotateRightHotkey.Clone() : null

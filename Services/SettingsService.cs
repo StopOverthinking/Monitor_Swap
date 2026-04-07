@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Runtime.Serialization.Json;
@@ -47,6 +48,7 @@ namespace MonitorSwap.Services
             }
 
             settings.EnsureDefaults();
+            EnsureMonitorSelectionDefaults(settings);
             ApplyDefaultLanguage(settings);
             return settings;
         }
@@ -54,6 +56,7 @@ namespace MonitorSwap.Services
         public void Save(AppSettings settings)
         {
             settings.EnsureDefaults();
+            NormalizeMonitorSelectionsForSave(settings);
             ApplyDefaultLanguage(settings);
             var directory = Path.GetDirectoryName(_settingsPath);
             if (!Directory.Exists(directory))
@@ -68,6 +71,38 @@ namespace MonitorSwap.Services
             }
 
             PersistPreferredLanguage(settings);
+        }
+
+        private static void EnsureMonitorSelectionDefaults(AppSettings settings)
+        {
+            if (settings.IncludedMonitorIds.Count > 0 || settings.IncludedMonitorDeviceNames.Count > 0)
+            {
+                return;
+            }
+
+            var monitorDisplayService = new MonitorDisplayService();
+            settings.IncludedMonitorIds = monitorDisplayService.ResolveStableIds(null);
+        }
+
+        private static void NormalizeMonitorSelectionsForSave(AppSettings settings)
+        {
+            if (settings.IncludedMonitorIds.Count == 0 && settings.IncludedMonitorDeviceNames.Count > 0)
+            {
+                var monitorDisplayService = new MonitorDisplayService();
+                var resolvedIds = monitorDisplayService.ResolveStableIds(
+                    settings.IncludedMonitorIds,
+                    settings.IncludedMonitorDeviceNames);
+
+                if (resolvedIds.Count > 0)
+                {
+                    settings.IncludedMonitorIds = resolvedIds;
+                }
+            }
+
+            if (settings.IncludedMonitorIds.Count > 0)
+            {
+                settings.IncludedMonitorDeviceNames = new List<string>();
+            }
         }
 
         private static void ApplyDefaultLanguage(AppSettings settings)

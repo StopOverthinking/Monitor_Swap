@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Drawing;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Windows.Forms;
 using MonitorSwap.Models;
 using MonitorSwap.Native;
@@ -63,6 +64,8 @@ namespace MonitorSwap.Services
             {
                 RestoreWindowOrder(windows);
             }
+
+            RefreshMovedWindows(windows);
 
             return RotationResult.Succeeded(
                 string.Format(
@@ -285,7 +288,10 @@ namespace MonitorSwap.Services
                 return NativeMethods.SetWindowPlacement(window.Handle, ref placement);
             }
 
-            var flags = NativeMethods.SwpNoActivate | NativeMethods.SwpNoOwnerZOrder;
+            var flags = NativeMethods.SwpNoActivate |
+                        NativeMethods.SwpNoOwnerZOrder |
+                        NativeMethods.SwpNoZOrder |
+                        NativeMethods.SwpAsyncWindowPos;
 
             if (window.IsFullScreen)
             {
@@ -325,6 +331,8 @@ namespace MonitorSwap.Services
             }
 
             NativeMethods.ShowWindow(hWnd, NativeMethods.SwRestore);
+            NativeMethods.DwmFlush();
+            Thread.Sleep(10);
 
             if (!NativeMethods.SetWindowPos(
                     hWnd,
@@ -338,8 +346,56 @@ namespace MonitorSwap.Services
                 return false;
             }
 
+            NativeMethods.DwmFlush();
+            Thread.Sleep(10);
             NativeMethods.ShowWindow(hWnd, NativeMethods.SwShowMaximized);
+            NativeMethods.DwmFlush();
             return true;
+        }
+
+        private static void RefreshMovedWindows(IEnumerable<CapturedWindow> windows)
+        {
+            var movedWindows = windows
+                .Where(window => window.WasMoved && !window.IsMinimized)
+                .ToList();
+
+            foreach (var window in movedWindows)
+            {
+                if (!NativeMethods.IsWindow(window.Handle))
+                {
+                    continue;
+                }
+
+                NativeMethods.SetWindowPos(
+                    window.Handle,
+                    NativeMethods.HwndTop,
+                    0,
+                    0,
+                    0,
+                    0,
+                    NativeMethods.SwpNoMove |
+                    NativeMethods.SwpNoSize |
+                    NativeMethods.SwpNoZOrder |
+                    NativeMethods.SwpNoActivate |
+                    NativeMethods.SwpNoOwnerZOrder |
+                    NativeMethods.SwpFrameChanged |
+                    NativeMethods.SwpAsyncWindowPos);
+
+                NativeMethods.RedrawWindow(
+                    window.Handle,
+                    IntPtr.Zero,
+                    IntPtr.Zero,
+                    NativeMethods.RdwInvalidate |
+                    NativeMethods.RdwErase |
+                    NativeMethods.RdwAllChildren |
+                    NativeMethods.RdwFrame |
+                    NativeMethods.RdwUpdateNow);
+            }
+
+            if (movedWindows.Count > 0)
+            {
+                NativeMethods.DwmFlush();
+            }
         }
 
         private static void RestoreWindowOrder(IReadOnlyList<CapturedWindow> windows)

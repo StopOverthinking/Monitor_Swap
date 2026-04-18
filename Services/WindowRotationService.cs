@@ -4,7 +4,6 @@ using System.Diagnostics;
 using System.Drawing;
 using System.Linq;
 using System.Text;
-using System.Threading;
 using System.Windows.Forms;
 using MonitorSwap.Models;
 using MonitorSwap.Native;
@@ -22,6 +21,11 @@ namespace MonitorSwap.Services
             "Shell_TrayWnd",
             "Shell_SecondaryTrayWnd",
             "NotifyIconOverflowWindow"
+        };
+
+        private static readonly HashSet<string> SurfaceBackedWindowClasses = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "Chrome_WidgetWin_1"
         };
 
         private static readonly IntPtr ShellWindowHandle = NativeMethods.GetShellWindow();
@@ -65,7 +69,7 @@ namespace MonitorSwap.Services
                 RestoreWindowOrder(windows);
             }
 
-            RefreshMovedWindows(windows);
+            RefreshSurfaceBackedWindows(windows);
 
             return RotationResult.Succeeded(
                 string.Format(
@@ -217,6 +221,7 @@ namespace MonitorSwap.Services
             }
 
             var exStyle = (uint)NativeMethods.GetWindowLongPtr(hWnd, NativeMethods.GwlExStyle).ToInt64();
+            var className = GetClassName(hWnd);
 
             snapshot = new CapturedWindow
             {
@@ -229,7 +234,8 @@ namespace MonitorSwap.Services
                 IsMinimized = placement.showCmd == NativeMethods.SwShowMinimized || NativeMethods.IsIconic(hWnd),
                 IsMaximized = placement.showCmd == NativeMethods.SwShowMaximized || NativeMethods.IsZoomed(hWnd),
                 IsFullScreen = IsFullScreenWindow(windowRectangle, includedScreen.Bounds),
-                IsTopMost = (exStyle & NativeMethods.WsExTopMost) != 0
+                IsTopMost = (exStyle & NativeMethods.WsExTopMost) != 0,
+                ClassName = className
             };
             return true;
         }
@@ -292,6 +298,10 @@ namespace MonitorSwap.Services
                         NativeMethods.SwpNoOwnerZOrder |
                         NativeMethods.SwpNoZOrder |
                         NativeMethods.SwpAsyncWindowPos;
+            if (RequiresSurfaceReset(window))
+            {
+                flags |= NativeMethods.SwpNoCopyBits | NativeMethods.SwpFrameChanged;
+            }
 
             if (window.IsFullScreen)
             {
@@ -308,6 +318,11 @@ namespace MonitorSwap.Services
             if (window.IsMaximized)
             {
                 return MoveMaximizedWindow(window.Handle, placement, normalTargetRectangle, flags);
+            }
+
+            if (RequiresSurfaceReset(window))
+            {
+                return MoveSurfaceBackedWindow(window.Handle, placement, normalTargetRectangle, flags);
             }
 
             return NativeMethods.SetWindowPos(
@@ -331,8 +346,6 @@ namespace MonitorSwap.Services
             }
 
             NativeMethods.ShowWindow(hWnd, NativeMethods.SwRestore);
-            NativeMethods.DwmFlush();
-            Thread.Sleep(10);
 
             if (!NativeMethods.SetWindowPos(
                     hWnd,
@@ -346,17 +359,49 @@ namespace MonitorSwap.Services
                 return false;
             }
 
-            NativeMethods.DwmFlush();
-            Thread.Sleep(10);
             NativeMethods.ShowWindow(hWnd, NativeMethods.SwShowMaximized);
+            return true;
+        }
+
+        private static bool MoveSurfaceBackedWindow(IntPtr hWnd, WINDOWPLACEMENT placement, Rectangle targetRectangle, uint flags)
+        {
+            placement.showCmd = NativeMethods.SwShowNormal;
+            placement.rcNormalPosition = NativeMethods.FromRectangle(targetRectangle);
+            if (!NativeMethods.SetWindowPlacement(hWnd, ref placement))
+            {
+                return false;
+            }
+
+            if (!NativeMethods.SetWindowPos(
+                    hWnd,
+                    NativeMethods.HwndTop,
+                    targetRectangle.Left,
+                    targetRectangle.Top,
+                    targetRectangle.Width,
+                    targetRectangle.Height,
+                    flags))
+            {
+                return false;
+            }
+
+            NativeMethods.RedrawWindow(
+                hWnd,
+                IntPtr.Zero,
+                IntPtr.Zero,
+                NativeMethods.RdwInvalidate |
+                NativeMethods.RdwErase |
+                NativeMethods.RdwAllChildren |
+                NativeMethods.RdwFrame |
+                NativeMethods.RdwUpdateNow);
+
             NativeMethods.DwmFlush();
             return true;
         }
 
-        private static void RefreshMovedWindows(IEnumerable<CapturedWindow> windows)
+        private static void RefreshSurfaceBackedWindows(IEnumerable<CapturedWindow> windows)
         {
             var movedWindows = windows
-                .Where(window => window.WasMoved && !window.IsMinimized)
+                .Where(window => window.WasMoved && !window.IsMinimized && RequiresSurfaceReset(window))
                 .ToList();
 
             foreach (var window in movedWindows)
@@ -512,6 +557,17 @@ namespace MonitorSwap.Services
             return processId == (uint)Process.GetCurrentProcess().Id;
         }
 
+        private static bool RequiresSurfaceReset(CapturedWindow window)
+        {
+            if (window == null || string.IsNullOrWhiteSpace(window.ClassName))
+            {
+                return false;
+            }
+
+            return window.ClassName.StartsWith("HwndWrapper[", StringComparison.OrdinalIgnoreCase) ||
+                   SurfaceBackedWindowClasses.Contains(window.ClassName);
+        }
+
         private sealed class CapturedWindow
         {
             public IntPtr Handle { get; set; }
@@ -537,6 +593,8 @@ namespace MonitorSwap.Services
             public bool WasMoved { get; set; }
 
             public Screen TargetScreen { get; set; }
+
+            public string ClassName { get; set; }
         }
     }
 

@@ -317,7 +317,7 @@ namespace MonitorSwap.Services
 
             if (window.IsMaximized)
             {
-                return MoveMaximizedWindow(window.Handle, placement, normalTargetRectangle, flags);
+                return MoveMaximizedWindow(window, placement, normalTargetRectangle);
             }
 
             if (RequiresSurfaceReset(window))
@@ -335,8 +335,17 @@ namespace MonitorSwap.Services
                 flags);
         }
 
-        private static bool MoveMaximizedWindow(IntPtr hWnd, WINDOWPLACEMENT placement, Rectangle targetRectangle, uint flags)
+        private static bool MoveMaximizedWindow(CapturedWindow window, WINDOWPLACEMENT placement, Rectangle targetRectangle)
         {
+            var hWnd = window.Handle;
+            var syncFlags = NativeMethods.SwpNoActivate |
+                            NativeMethods.SwpNoOwnerZOrder |
+                            NativeMethods.SwpNoZOrder;
+            if (RequiresSurfaceReset(window))
+            {
+                syncFlags |= NativeMethods.SwpNoCopyBits | NativeMethods.SwpFrameChanged;
+            }
+
             placement.showCmd = NativeMethods.SwShowNormal;
             placement.rcNormalPosition = NativeMethods.FromRectangle(targetRectangle);
 
@@ -354,12 +363,35 @@ namespace MonitorSwap.Services
                     targetRectangle.Top,
                     targetRectangle.Width,
                     targetRectangle.Height,
-                    flags))
+                    syncFlags))
+            {
+                return false;
+            }
+
+            placement.showCmd = NativeMethods.SwShowMaximized;
+            placement.rcNormalPosition = NativeMethods.FromRectangle(targetRectangle);
+            if (!NativeMethods.SetWindowPlacement(hWnd, ref placement))
             {
                 return false;
             }
 
             NativeMethods.ShowWindow(hWnd, NativeMethods.SwShowMaximized);
+
+            if (RequiresSurfaceReset(window))
+            {
+                NativeMethods.RedrawWindow(
+                    hWnd,
+                    IntPtr.Zero,
+                    IntPtr.Zero,
+                    NativeMethods.RdwInvalidate |
+                    NativeMethods.RdwErase |
+                    NativeMethods.RdwAllChildren |
+                    NativeMethods.RdwFrame |
+                    NativeMethods.RdwUpdateNow);
+
+                NativeMethods.DwmFlush();
+            }
+
             return true;
         }
 

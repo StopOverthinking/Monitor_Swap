@@ -33,6 +33,7 @@ PrivilegesRequiredOverridesAllowed=dialog
 ArchitecturesInstallIn64BitMode=x64compatible
 ChangesAssociations=no
 CloseApplications=yes
+CloseApplicationsFilter=MonitorSwap.exe
 AppMutex=MonitorSwap.Singleton
 VersionInfoVersion={#AppVersion}
 VersionInfoCompany=MonitorSwap
@@ -62,7 +63,91 @@ Root: HKCU; Subkey: "Software\MonitorSwap"; ValueType: string; ValueName: "UiLan
 [Run]
 Filename: "{app}\MonitorSwap.exe"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent
 
+[CustomMessages]
+english.RunningInstanceTitle=Close Monitor Swap
+english.RunningInstancePrompt=Monitor Swap is currently running. Setup needs to close it before continuing.%n%nDo you want Setup to close the running app now?
+english.RunningInstanceFailed=Setup could not close Monitor Swap automatically. Please close it manually and run Setup again.
+korean.RunningInstanceTitle=Monitor Swap 종료
+korean.RunningInstancePrompt=Monitor Swap가 현재 실행 중입니다. 설치를 계속하려면 먼저 종료해야 합니다.%n%n지금 실행 중인 앱을 설치기가 종료하도록 할까요?
+korean.RunningInstanceFailed=설치기가 Monitor Swap를 자동으로 종료하지 못했습니다. 앱을 직접 종료한 뒤 설치기를 다시 실행해 주세요.
+
 [Code]
+function IsMonitorSwapRunning: Boolean;
+begin
+  Result := CheckForMutexes('MonitorSwap.Singleton');
+end;
+
+function TryCloseMonitorSwap: Boolean;
+var
+  ResultCode: Integer;
+  Attempts: Integer;
+begin
+  Result := True;
+
+  if not IsMonitorSwapRunning then
+    Exit;
+
+  Exec(
+    ExpandConstant('{sys}\taskkill.exe'),
+    '/IM MonitorSwap.exe /T',
+    '',
+    SW_HIDE,
+    ewWaitUntilTerminated,
+    ResultCode);
+
+  for Attempts := 1 to 12 do
+  begin
+    if not IsMonitorSwapRunning then
+      Exit;
+
+     Sleep(250);
+  end;
+
+  Exec(
+    ExpandConstant('{sys}\taskkill.exe'),
+    '/F /IM MonitorSwap.exe /T',
+    '',
+    SW_HIDE,
+    ewWaitUntilTerminated,
+    ResultCode);
+
+  for Attempts := 1 to 20 do
+  begin
+    if not IsMonitorSwapRunning then
+      Exit;
+
+    Sleep(250);
+  end;
+
+  Result := not IsMonitorSwapRunning;
+end;
+
+function InitializeSetup: Boolean;
+begin
+  Result := True;
+
+  if not IsMonitorSwapRunning then
+    Exit;
+
+  if MsgBox(
+       ExpandConstant('{cm:RunningInstancePrompt}'),
+       mbConfirmation,
+       MB_YESNO) <> IDYES then
+  begin
+    Result := False;
+    Exit;
+  end;
+
+  if not TryCloseMonitorSwap then
+  begin
+    MsgBox(
+      ExpandConstant('{cm:RunningInstanceFailed}'),
+      mbError,
+      MB_OK);
+    Result := False;
+  end;
+end;
+
 function GetAppLanguageCode(Param: string): string;
 begin
   if ActiveLanguage = 'korean' then

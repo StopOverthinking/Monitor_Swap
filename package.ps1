@@ -18,6 +18,10 @@ if (-not $Version) {
     $Version = $match.Groups[1].Value
 }
 
+if ($Version -match '^\d+\.\d+\.\d+\.0$') {
+    $Version = $Version.Substring(0, $Version.Length - 2)
+}
+
 & (Join-Path $PSScriptRoot "build.ps1") -Configuration Release
 
 $isccPath = @(

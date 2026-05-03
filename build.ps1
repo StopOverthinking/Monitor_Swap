@@ -41,6 +41,7 @@ $sources = @(
     "Services\AppLocalization.cs",
     "Services\HotkeyManager.cs",
     "Services\MonitorDisplayService.cs",
+    "Services\RotationTraceService.cs",
     "Services\SettingsService.cs",
     "Services\WindowRotationService.cs",
     "Forms\SettingsForm.cs"

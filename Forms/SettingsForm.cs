@@ -15,6 +15,8 @@ namespace MonitorSwap.Forms
         private readonly AppLanguage _originalLanguage;
         private readonly MonitorDisplayService _monitorDisplayService;
         private readonly Icon _formIcon;
+        private readonly TableLayoutPanel _rootLayout;
+        private readonly TableLayoutPanel _languagePanel;
         private readonly ComboBox _languageComboBox;
         private readonly Label _languageLabel;
         private readonly GroupBox _hotkeyGroup;
@@ -29,9 +31,13 @@ namespace MonitorSwap.Forms
         private readonly CheckBox _includeMinimizedCheckBox;
         private readonly CheckBox _startWithWindowsCheckBox;
         private readonly CheckBox _preserveOrderCheckBox;
+        private readonly CheckBox _browserCompatibilityModeCheckBox;
+        private readonly CheckBox _skipBrowserFullscreenWindowsCheckBox;
+        private readonly CheckBox _enableRotationDiagnosticsCheckBox;
         private readonly GroupBox _monitorGroup;
         private readonly CheckedListBox _monitorList;
         private readonly Label _monitorHelpLabel;
+        private readonly FlowLayoutPanel _buttonPanel;
         private readonly Button _saveButton;
         private readonly Button _cancelButton;
         private CaptureTarget _captureTarget;
@@ -46,8 +52,8 @@ namespace MonitorSwap.Forms
             _monitorDisplayService = new MonitorDisplayService();
 
             StartPosition = FormStartPosition.CenterScreen;
-            MinimumSize = new Size(580, 520);
-            Size = new Size(640, 560);
+            MinimumSize = new Size(580, 640);
+            Size = new Size(640, 700);
             FormBorderStyle = FormBorderStyle.Sizable;
             MaximizeBox = false;
             MinimizeBox = false;
@@ -55,30 +61,30 @@ namespace MonitorSwap.Forms
             _formIcon = AppIconProvider.CreateAppIcon();
             Icon = _formIcon;
 
-            var root = new TableLayoutPanel
+            _rootLayout = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 1,
                 RowCount = 6,
                 Padding = new Padding(14)
             };
-            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            root.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
-            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            Controls.Add(root);
+            _rootLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            _rootLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            _rootLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            _rootLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+            _rootLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            _rootLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            Controls.Add(_rootLayout);
 
-            var languagePanel = new TableLayoutPanel
+            _languagePanel = new TableLayoutPanel
             {
                 Dock = DockStyle.Top,
                 ColumnCount = 2,
                 AutoSize = true,
                 Padding = new Padding(0, 0, 0, 8)
             };
-            languagePanel.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-            languagePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 180));
+            _languagePanel.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            _languagePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 180));
             _languageLabel = new Label
             {
                 AutoSize = true,
@@ -94,16 +100,16 @@ namespace MonitorSwap.Forms
             _languageComboBox.Items.Add(new LanguageItem(AppLanguage.English, "English"));
             _languageComboBox.Items.Add(new LanguageItem(AppLanguage.Korean, "\uD55C\uAD6D\uC5B4"));
             _languageComboBox.SelectedIndexChanged += OnLanguageSelectionChanged;
-            languagePanel.Controls.Add(_languageLabel, 0, 0);
-            languagePanel.Controls.Add(_languageComboBox, 1, 0);
-            root.Controls.Add(languagePanel, 0, 0);
+            _languagePanel.Controls.Add(_languageLabel, 0, 0);
+            _languagePanel.Controls.Add(_languageComboBox, 1, 0);
+            _rootLayout.Controls.Add(_languagePanel, 0, 0);
 
             _hotkeyGroup = new GroupBox
             {
                 Dock = DockStyle.Top,
                 AutoSize = true
             };
-            root.Controls.Add(_hotkeyGroup, 0, 1);
+            _rootLayout.Controls.Add(_hotkeyGroup, 0, 1);
 
             var hotkeyLayout = new TableLayoutPanel
             {
@@ -145,7 +151,7 @@ namespace MonitorSwap.Forms
                 Dock = DockStyle.Top,
                 AutoSize = true
             };
-            root.Controls.Add(_optionGroup, 0, 2);
+            _rootLayout.Controls.Add(_optionGroup, 0, 2);
 
             var optionLayout = new FlowLayoutPanel
             {
@@ -178,11 +184,32 @@ namespace MonitorSwap.Forms
             };
             optionLayout.Controls.Add(_preserveOrderCheckBox);
 
+            _browserCompatibilityModeCheckBox = new CheckBox
+            {
+                AutoSize = true,
+                Checked = _settings.EnableBrowserCompatibilityMode
+            };
+            optionLayout.Controls.Add(_browserCompatibilityModeCheckBox);
+
+            _skipBrowserFullscreenWindowsCheckBox = new CheckBox
+            {
+                AutoSize = true,
+                Checked = _settings.SkipBrowserFullscreenWindows
+            };
+            optionLayout.Controls.Add(_skipBrowserFullscreenWindowsCheckBox);
+
+            _enableRotationDiagnosticsCheckBox = new CheckBox
+            {
+                AutoSize = true,
+                Checked = _settings.EnableRotationDiagnostics
+            };
+            optionLayout.Controls.Add(_enableRotationDiagnosticsCheckBox);
+
             _monitorGroup = new GroupBox
             {
                 Dock = DockStyle.Fill
             };
-            root.Controls.Add(_monitorGroup, 0, 3);
+            _rootLayout.Controls.Add(_monitorGroup, 0, 3);
 
             _monitorList = new CheckedListBox
             {
@@ -198,9 +225,9 @@ namespace MonitorSwap.Forms
                 Dock = DockStyle.Top,
                 Padding = new Padding(3, 8, 3, 0)
             };
-            root.Controls.Add(_monitorHelpLabel, 0, 4);
+            _rootLayout.Controls.Add(_monitorHelpLabel, 0, 4);
 
-            var buttonPanel = new FlowLayoutPanel
+            _buttonPanel = new FlowLayoutPanel
             {
                 Dock = DockStyle.Fill,
                 FlowDirection = FlowDirection.RightToLeft,
@@ -210,9 +237,9 @@ namespace MonitorSwap.Forms
             _saveButton.Click += OnSaveClicked;
             _cancelButton = new Button { AutoSize = true };
             _cancelButton.Click += delegate { DialogResult = DialogResult.Cancel; };
-            buttonPanel.Controls.Add(_saveButton);
-            buttonPanel.Controls.Add(_cancelButton);
-            root.Controls.Add(buttonPanel, 0, 5);
+            _buttonPanel.Controls.Add(_saveButton);
+            _buttonPanel.Controls.Add(_cancelButton);
+            _rootLayout.Controls.Add(_buttonPanel, 0, 5);
 
             _captureStatusState = CaptureStatusState.Default;
             PopulateMonitorList(GetStoredMonitorSelections());
@@ -220,6 +247,7 @@ namespace MonitorSwap.Forms
             AppLocalization.LanguageChanged += OnApplicationLanguageChanged;
             SelectLanguage(_settings.GetUiLanguage());
             UpdateLocalizedText();
+            AdjustMinimumFormSize();
         }
 
         public AppSettings UpdatedSettings
@@ -365,12 +393,16 @@ namespace MonitorSwap.Forms
             _includeMinimizedCheckBox.Text = AppLocalization.Get(TextKey.IncludeMinimizedWindows);
             _startWithWindowsCheckBox.Text = AppLocalization.Get(TextKey.StartWithWindowsInBackground);
             _preserveOrderCheckBox.Text = AppLocalization.Get(TextKey.PreserveWindowOrder);
+            _browserCompatibilityModeCheckBox.Text = AppLocalization.Get(TextKey.BrowserCompatibilityMode);
+            _skipBrowserFullscreenWindowsCheckBox.Text = AppLocalization.Get(TextKey.SkipBrowserFullscreenWindows);
+            _enableRotationDiagnosticsCheckBox.Text = AppLocalization.Get(TextKey.EnableRotationDiagnostics);
             _monitorGroup.Text = AppLocalization.Get(TextKey.GroupIncludedMonitors);
             _monitorHelpLabel.Text = AppLocalization.Get(TextKey.MonitorHelp);
             _saveButton.Text = AppLocalization.Get(TextKey.Save);
             _cancelButton.Text = AppLocalization.Get(TextKey.Cancel);
             UpdateCaptureStatusText();
             RefreshMonitorLabels();
+            AdjustMinimumFormSize();
         }
 
         private void BeginCapture(CaptureTarget target)
@@ -456,6 +488,28 @@ namespace MonitorSwap.Forms
             }
         }
 
+        private void AdjustMinimumFormSize()
+        {
+            var minimumVisibleMonitorItemHeight = Math.Max(28, _monitorList.ItemHeight + 10);
+            var minimumMonitorGroupHeight = minimumVisibleMonitorItemHeight + 48;
+            _monitorGroup.MinimumSize = new Size(0, minimumMonitorGroupHeight);
+
+            var currentClientWidth = Math.Max(580, ClientSize.Width);
+            var requiredClientHeight =
+                _rootLayout.Padding.Vertical +
+                _languagePanel.GetPreferredSize(new Size(currentClientWidth, 0)).Height +
+                _hotkeyGroup.GetPreferredSize(new Size(currentClientWidth, 0)).Height +
+                _optionGroup.GetPreferredSize(new Size(currentClientWidth, 0)).Height +
+                _monitorGroup.MinimumSize.Height +
+                _monitorHelpLabel.GetPreferredSize(new Size(currentClientWidth, 0)).Height +
+                _buttonPanel.GetPreferredSize(new Size(currentClientWidth, 0)).Height +
+                40;
+
+            var nonClientHeight = Height - ClientSize.Height;
+            var minimumHeight = requiredClientHeight + nonClientHeight;
+            MinimumSize = new Size(580, Math.Max(640, minimumHeight));
+        }
+
         private static string BuildMonitorLabel(Screen screen, string friendlyName)
         {
             var deviceAlias = NormalizeDeviceAlias(screen.DeviceName);
@@ -519,6 +573,9 @@ namespace MonitorSwap.Forms
             _settings.IncludeMinimizedWindows = _includeMinimizedCheckBox.Checked;
             _settings.StartWithWindows = _startWithWindowsCheckBox.Checked;
             _settings.PreserveWindowOrder = _preserveOrderCheckBox.Checked;
+            _settings.EnableBrowserCompatibilityMode = _browserCompatibilityModeCheckBox.Checked;
+            _settings.SkipBrowserFullscreenWindows = _skipBrowserFullscreenWindowsCheckBox.Checked;
+            _settings.EnableRotationDiagnostics = _enableRotationDiagnosticsCheckBox.Checked;
             _settings.IncludedMonitorIds = selectedMonitors;
             _settings.IncludedMonitorDeviceNames = new List<string>();
             _settings.SetUiLanguage(GetSelectedLanguage());

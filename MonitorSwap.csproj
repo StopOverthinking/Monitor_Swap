@@ -56,6 +56,7 @@
     <Compile Include="Services\HotkeyManager.cs" />
     <Compile Include="Services\MonitorDisplayService.cs" />
     <Compile Include="Services\SettingsService.cs" />
+    <Compile Include="Services\RotationTraceService.cs" />
     <Compile Include="Services\WindowRotationService.cs" />
     <Compile Include="TrayApplicationContext.cs" />
   </ItemGroup>

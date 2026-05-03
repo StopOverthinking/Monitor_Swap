@@ -12,6 +12,7 @@ namespace MonitorSwap
         private readonly AutoStartService _autoStartService;
         private readonly Icon _appIcon;
         private readonly HotkeyManager _hotkeyManager;
+        private readonly RotationTraceService _rotationTraceService;
         private readonly SettingsService _settingsService;
         private readonly WindowRotationService _windowRotationService;
         private readonly ContextMenuStrip _contextMenu;
@@ -27,11 +28,13 @@ namespace MonitorSwap
         {
             _settingsService = new SettingsService();
             _autoStartService = new AutoStartService();
+            _rotationTraceService = new RotationTraceService();
             _windowRotationService = new WindowRotationService();
             _hotkeyManager = new HotkeyManager();
             _hotkeyManager.HotkeyPressed += OnHotkeyPressed;
 
             _settings = _settingsService.Load();
+            _rotationTraceService.ResetLogsForNewBootIfNeeded();
             _settings.StartWithWindows = _autoStartService.IsEnabled();
             _appIcon = AppIconProvider.CreateAppIcon();
 
@@ -166,10 +169,7 @@ namespace MonitorSwap
 
         private void ShowBalloonTip(string title, string message, ToolTipIcon icon)
         {
-            _notifyIcon.BalloonTipTitle = title;
-            _notifyIcon.BalloonTipText = message;
-            _notifyIcon.BalloonTipIcon = icon;
-            _notifyIcon.ShowBalloonTip(3000);
+            // User feedback requested that tray balloon notifications stay disabled.
         }
 
         protected override void ExitThreadCore()

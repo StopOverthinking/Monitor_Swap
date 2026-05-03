@@ -11,9 +11,12 @@ namespace MonitorSwap.Models
         {
             IncludedMonitorIds = new List<string>();
             IncludedMonitorDeviceNames = new List<string>();
+            IncludeMinimizedWindows = true;
             RotateLeftHotkey = HotkeyBinding.CreateDefault(Keys.Left);
             RotateRightHotkey = HotkeyBinding.CreateDefault(Keys.Right);
             PreserveWindowOrder = true;
+            EnableBrowserCompatibilityMode = true;
+            EnableRotationDiagnostics = false;
         }
 
         [DataMember]
@@ -24,6 +27,18 @@ namespace MonitorSwap.Models
 
         [DataMember]
         public bool PreserveWindowOrder { get; set; }
+
+        [DataMember]
+        public bool EnableBrowserCompatibilityMode { get; set; }
+
+        [DataMember]
+        public bool SkipBrowserFullscreenWindows { get; set; }
+
+        [DataMember]
+        public bool EnableRotationDiagnostics { get; set; }
+
+        [DataMember]
+        public bool CompatibilityDefaultsInitialized { get; set; }
 
         [DataMember]
         public string UiLanguageCode { get; set; }
@@ -46,6 +61,12 @@ namespace MonitorSwap.Models
             IncludedMonitorDeviceNames = IncludedMonitorDeviceNames ?? new List<string>();
             RotateLeftHotkey = RotateLeftHotkey ?? HotkeyBinding.CreateDefault(Keys.Left);
             RotateRightHotkey = RotateRightHotkey ?? HotkeyBinding.CreateDefault(Keys.Right);
+            if (!CompatibilityDefaultsInitialized)
+            {
+                EnableBrowserCompatibilityMode = true;
+                EnableRotationDiagnostics = false;
+                CompatibilityDefaultsInitialized = true;
+            }
         }
 
         public AppSettings Clone()
@@ -55,6 +76,10 @@ namespace MonitorSwap.Models
                 IncludeMinimizedWindows = IncludeMinimizedWindows,
                 StartWithWindows = StartWithWindows,
                 PreserveWindowOrder = PreserveWindowOrder,
+                EnableBrowserCompatibilityMode = EnableBrowserCompatibilityMode,
+                SkipBrowserFullscreenWindows = SkipBrowserFullscreenWindows,
+                EnableRotationDiagnostics = EnableRotationDiagnostics,
+                CompatibilityDefaultsInitialized = CompatibilityDefaultsInitialized,
                 UiLanguageCode = UiLanguageCode,
                 IncludedMonitorIds = new List<string>(IncludedMonitorIds ?? new List<string>()),
                 IncludedMonitorDeviceNames = new List<string>(IncludedMonitorDeviceNames ?? new List<string>()),

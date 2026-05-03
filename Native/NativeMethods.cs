@@ -79,6 +79,9 @@ namespace MonitorSwap.Native
         public static extern int GetWindowTextLength(IntPtr hWnd);
 
         [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        public static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
         public static extern int GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
 
         [DllImport("user32.dll", SetLastError = true)]
@@ -104,6 +107,9 @@ namespace MonitorSwap.Native
 
         [DllImport("user32.dll")]
         public static extern short GetKeyState(int nVirtKey);
+
+        [DllImport("kernel32.dll")]
+        public static extern ulong GetTickCount64();
 
         [DllImport("user32.dll")]
         public static extern int GetDisplayConfigBufferSizes(uint flags, out uint numPathArrayElements, out uint numModeInfoArrayElements);

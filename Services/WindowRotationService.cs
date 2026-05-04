@@ -87,7 +87,7 @@ namespace MonitorSwap.Services
                         continue;
                     }
 
-                    if (settings.SkipBrowserFullscreenWindows && window.IsChromiumWindow && window.IsFullScreen)
+                    if (settings.SkipBrowserFullscreenWindows && window.IsChromiumWindow && window.IsFullScreen && !window.IsMaximized)
                     {
                         skippedCount++;
                         trace.Write(
@@ -300,6 +300,8 @@ namespace MonitorSwap.Services
             NativeMethods.GetWindowThreadProcessId(hWnd, out processId);
             var processName = TryGetProcessName(processId);
             var windowTitle = GetWindowTitle(hWnd);
+            var isMinimized = placement.showCmd == NativeMethods.SwShowMinimized || NativeMethods.IsIconic(hWnd);
+            var isMaximized = placement.showCmd == NativeMethods.SwShowMaximized || NativeMethods.IsZoomed(hWnd);
 
             snapshot = new CapturedWindow
             {
@@ -312,9 +314,9 @@ namespace MonitorSwap.Services
                 RestoreRectangle = restoreRectangle,
                 Placement = placement,
                 ZOrder = zOrder,
-                IsMinimized = placement.showCmd == NativeMethods.SwShowMinimized || NativeMethods.IsIconic(hWnd),
-                IsMaximized = placement.showCmd == NativeMethods.SwShowMaximized || NativeMethods.IsZoomed(hWnd),
-                IsFullScreen = IsFullScreenWindow(windowRectangle, includedScreen.Bounds),
+                IsMinimized = isMinimized,
+                IsMaximized = isMaximized,
+                IsFullScreen = !isMaximized && IsFullScreenWindow(windowRectangle, includedScreen.Bounds),
                 IsTopMost = (exStyle & NativeMethods.WsExTopMost) != 0,
                 ClassName = className,
                 IsChromiumWindow = IsChromiumWindow(className, processName)
@@ -399,16 +401,16 @@ namespace MonitorSwap.Services
                 window.IsMaximized,
                 useBrowserCompatibilityMode);
 
+            // A maximized Chromium window can look fullscreen on mixed-DPI monitor setups.
+            // Preserve maximize semantics before handling true borderless fullscreen windows.
+            if (window.IsMaximized)
+            {
+                return MoveMaximizedWindow(window, targetScreen, placement, normalTargetRectangle, trace, out failureReason);
+            }
+
             if (useBrowserCompatibilityMode && window.IsFullScreen)
             {
                 return MoveChromiumFullScreenWindow(window, targetScreen, placement, normalTargetRectangle, trace, out failureReason);
-            }
-
-            // Maximize semantics should win for standard desktop windows like Explorer.
-            // Chromium fullscreen is handled above before we get here.
-            if (window.IsMaximized)
-            {
-                return MoveMaximizedWindow(window, placement, normalTargetRectangle, trace, out failureReason);
             }
 
             if (window.IsFullScreen)
@@ -523,6 +525,7 @@ namespace MonitorSwap.Services
 
         private static bool MoveMaximizedWindow(
             CapturedWindow window,
+            Screen targetScreen,
             WINDOWPLACEMENT placement,
             Rectangle targetRectangle,
             RotationTraceService.RotationTraceSession trace,
@@ -561,7 +564,7 @@ namespace MonitorSwap.Services
                 PulseRedraw(hWnd, trace, "move-maximized-redraw");
             }
 
-            if (!ValidateWindowReachedTarget(window, Screen.FromRectangle(targetRectangle), targetRectangle, false, trace, "validate-maximized"))
+            if (!ValidateWindowReachedTarget(window, targetScreen, targetRectangle, false, trace, "validate-maximized"))
             {
                 failureReason = "maximized validation failed";
                 return false;

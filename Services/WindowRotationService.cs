@@ -405,7 +405,8 @@ namespace MonitorSwap.Services
             // Preserve maximize semantics before handling true borderless fullscreen windows.
             if (window.IsMaximized)
             {
-                return MoveMaximizedWindow(window, targetScreen, placement, normalTargetRectangle, trace, out failureReason);
+                var useNovelAiSafeRestore = useBrowserCompatibilityMode && IsNovelAiWindow(window);
+                return MoveMaximizedWindow(window, targetScreen, placement, normalTargetRectangle, useNovelAiSafeRestore, trace, out failureReason);
             }
 
             if (useBrowserCompatibilityMode && window.IsFullScreen)
@@ -528,15 +529,30 @@ namespace MonitorSwap.Services
             Screen targetScreen,
             WINDOWPLACEMENT placement,
             Rectangle targetRectangle,
+            bool useNovelAiSafeRestore,
             RotationTraceService.RotationTraceSession trace,
             out string failureReason)
         {
             failureReason = null;
             var hWnd = window.Handle;
             var syncFlags = BuildMoveFlags(window, false);
+            var restoreRectangle = useNovelAiSafeRestore
+                ? BuildNovelAiSafeRestoreRectangle(targetRectangle, targetScreen.WorkingArea)
+                : targetRectangle;
+            var finalRestoreRectangle = useNovelAiSafeRestore ? restoreRectangle : targetRectangle;
+
+            if (useNovelAiSafeRestore)
+            {
+                trace.Write(
+                    "move-maximized-novelai-safe-restore desired={0} safe={1} finalRestore={2} targetWorkingArea={3}",
+                    FormatRectangle(targetRectangle),
+                    FormatRectangle(restoreRectangle),
+                    FormatRectangle(finalRestoreRectangle),
+                    FormatRectangle(targetScreen.WorkingArea));
+            }
 
             placement.showCmd = NativeMethods.SwShowNormal;
-            placement.rcNormalPosition = NativeMethods.FromRectangle(targetRectangle);
+            placement.rcNormalPosition = NativeMethods.FromRectangle(restoreRectangle);
 
             if (!SetWindowPlacementWithLogging(hWnd, ref placement, trace, "move-maximized-placement-normal", out failureReason))
             {
@@ -545,13 +561,13 @@ namespace MonitorSwap.Services
 
             ShowWindowWithLogging(hWnd, NativeMethods.SwRestore, trace, "move-maximized-restore");
 
-            if (!SetWindowPosWithLogging(hWnd, NativeMethods.HwndTop, targetRectangle, syncFlags, trace, "move-maximized-pos", out failureReason))
+            if (!SetWindowPosWithLogging(hWnd, NativeMethods.HwndTop, restoreRectangle, syncFlags, trace, "move-maximized-pos", out failureReason))
             {
                 return false;
             }
 
             placement.showCmd = NativeMethods.SwShowMaximized;
-            placement.rcNormalPosition = NativeMethods.FromRectangle(targetRectangle);
+            placement.rcNormalPosition = NativeMethods.FromRectangle(finalRestoreRectangle);
             if (!SetWindowPlacementWithLogging(hWnd, ref placement, trace, "move-maximized-placement-maximized", out failureReason))
             {
                 return false;
@@ -987,6 +1003,16 @@ namespace MonitorSwap.Services
             return new Rectangle(targetX, targetY, targetWidth, targetHeight);
         }
 
+        private static Rectangle BuildNovelAiSafeRestoreRectangle(Rectangle desiredRectangle, Rectangle targetWorkingArea)
+        {
+            if (targetWorkingArea.Width <= 0 || targetWorkingArea.Height <= 0)
+            {
+                return desiredRectangle;
+            }
+
+            return targetWorkingArea;
+        }
+
         private static int Clamp(int value, int minimum, int maximum)
         {
             if (value < minimum)
@@ -1058,6 +1084,14 @@ namespace MonitorSwap.Services
             return (!string.IsNullOrWhiteSpace(className) &&
                     className.StartsWith("Chrome_WidgetWin_", StringComparison.OrdinalIgnoreCase)) ||
                    ChromiumProcessNames.Contains(processName ?? string.Empty);
+        }
+
+        private static bool IsNovelAiWindow(CapturedWindow window)
+        {
+            return window != null &&
+                   window.IsChromiumWindow &&
+                   !string.IsNullOrWhiteSpace(window.WindowTitle) &&
+                   window.WindowTitle.IndexOf("NovelAI", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         private static bool IsFullScreenWindow(Rectangle rectangle, Rectangle screenBounds)

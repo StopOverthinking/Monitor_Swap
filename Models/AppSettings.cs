@@ -15,6 +15,7 @@ namespace MonitorSwap.Models
             RotateLeftHotkey = HotkeyBinding.CreateDefault(Keys.Left);
             RotateRightHotkey = HotkeyBinding.CreateDefault(Keys.Right);
             PreserveWindowOrder = true;
+            EnableFastMode = false;
             EnableBrowserCompatibilityMode = true;
             EnableRotationDiagnostics = false;
         }
@@ -27,6 +28,9 @@ namespace MonitorSwap.Models
 
         [DataMember]
         public bool PreserveWindowOrder { get; set; }
+
+        [DataMember]
+        public bool EnableFastMode { get; set; }
 
         [DataMember]
         public bool EnableBrowserCompatibilityMode { get; set; }
@@ -76,6 +80,7 @@ namespace MonitorSwap.Models
                 IncludeMinimizedWindows = IncludeMinimizedWindows,
                 StartWithWindows = StartWithWindows,
                 PreserveWindowOrder = PreserveWindowOrder,
+                EnableFastMode = EnableFastMode,
                 EnableBrowserCompatibilityMode = EnableBrowserCompatibilityMode,
                 SkipBrowserFullscreenWindows = SkipBrowserFullscreenWindows,
                 EnableRotationDiagnostics = EnableRotationDiagnostics,

@@ -31,6 +31,7 @@ namespace MonitorSwap.Forms
         private readonly CheckBox _includeMinimizedCheckBox;
         private readonly CheckBox _startWithWindowsCheckBox;
         private readonly CheckBox _preserveOrderCheckBox;
+        private readonly CheckBox _fastModeCheckBox;
         private readonly CheckBox _browserCompatibilityModeCheckBox;
         private readonly CheckBox _skipBrowserFullscreenWindowsCheckBox;
         private readonly CheckBox _enableRotationDiagnosticsCheckBox;
@@ -183,6 +184,13 @@ namespace MonitorSwap.Forms
                 Checked = _settings.PreserveWindowOrder
             };
             optionLayout.Controls.Add(_preserveOrderCheckBox);
+
+            _fastModeCheckBox = new CheckBox
+            {
+                AutoSize = true,
+                Checked = _settings.EnableFastMode
+            };
+            optionLayout.Controls.Add(_fastModeCheckBox);
 
             _browserCompatibilityModeCheckBox = new CheckBox
             {
@@ -393,6 +401,7 @@ namespace MonitorSwap.Forms
             _includeMinimizedCheckBox.Text = AppLocalization.Get(TextKey.IncludeMinimizedWindows);
             _startWithWindowsCheckBox.Text = AppLocalization.Get(TextKey.StartWithWindowsInBackground);
             _preserveOrderCheckBox.Text = AppLocalization.Get(TextKey.PreserveWindowOrder);
+            _fastModeCheckBox.Text = AppLocalization.Get(TextKey.EnableFastMode);
             _browserCompatibilityModeCheckBox.Text = AppLocalization.Get(TextKey.BrowserCompatibilityMode);
             _skipBrowserFullscreenWindowsCheckBox.Text = AppLocalization.Get(TextKey.SkipBrowserFullscreenWindows);
             _enableRotationDiagnosticsCheckBox.Text = AppLocalization.Get(TextKey.EnableRotationDiagnostics);
@@ -573,6 +582,7 @@ namespace MonitorSwap.Forms
             _settings.IncludeMinimizedWindows = _includeMinimizedCheckBox.Checked;
             _settings.StartWithWindows = _startWithWindowsCheckBox.Checked;
             _settings.PreserveWindowOrder = _preserveOrderCheckBox.Checked;
+            _settings.EnableFastMode = _fastModeCheckBox.Checked;
             _settings.EnableBrowserCompatibilityMode = _browserCompatibilityModeCheckBox.Checked;
             _settings.SkipBrowserFullscreenWindows = _skipBrowserFullscreenWindowsCheckBox.Checked;
             _settings.EnableRotationDiagnostics = _enableRotationDiagnosticsCheckBox.Checked;

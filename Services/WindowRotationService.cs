@@ -48,10 +48,11 @@ namespace MonitorSwap.Services
             using (var trace = _traceService.BeginSession(settings, direction))
             {
                 trace.Write(
-                    "rotate-request direction={0} includeMinimized={1} preserveOrder={2} browserCompatibility={3} skipBrowserFullscreen={4}",
+                    "rotate-request direction={0} includeMinimized={1} preserveOrder={2} fastMode={3} browserCompatibility={4} skipBrowserFullscreen={5}",
                     direction,
                     settings.IncludeMinimizedWindows,
                     settings.PreserveWindowOrder,
+                    settings.EnableFastMode,
                     settings.EnableBrowserCompatibilityMode,
                     settings.SkipBrowserFullscreenWindows);
 
@@ -120,9 +121,13 @@ namespace MonitorSwap.Services
                         failureReason);
                 }
 
-                if (settings.PreserveWindowOrder)
+                if (settings.PreserveWindowOrder && !settings.EnableFastMode)
                 {
                     RestoreWindowOrder(windows, trace);
+                }
+                else if (settings.PreserveWindowOrder && settings.EnableFastMode)
+                {
+                    trace.Write("skip-restore-order reason=fast-mode");
                 }
 
                 RefreshSurfaceBackedWindows(windows, trace);
@@ -390,7 +395,7 @@ namespace MonitorSwap.Services
             var flags = BuildMoveFlags(window, !useBrowserCompatibilityMode);
 
             trace.Write(
-                "move-begin handle=0x{0:X} process={1} class={2} title=\"{3}\" src={4} dst={5} fullscreen={6} maximized={7} compatibility={8}",
+                "move-begin handle=0x{0:X} process={1} class={2} title=\"{3}\" src={4} dst={5} fullscreen={6} maximized={7} compatibility={8} fastMode={9}",
                 window.Handle.ToInt64(),
                 window.ProcessName,
                 window.ClassName,
@@ -399,13 +404,19 @@ namespace MonitorSwap.Services
                 targetScreen.DeviceName,
                 window.IsFullScreen,
                 window.IsMaximized,
-                useBrowserCompatibilityMode);
+                useBrowserCompatibilityMode,
+                settings.EnableFastMode);
 
             // A maximized Chromium window can look fullscreen on mixed-DPI monitor setups.
             // Preserve maximize semantics before handling true borderless fullscreen windows.
             if (window.IsMaximized)
             {
                 var useNovelAiSafeRestore = useBrowserCompatibilityMode && IsNovelAiWindow(window);
+                if (settings.EnableFastMode && !window.IsChromiumWindow && !RequiresSurfaceReset(window))
+                {
+                    return MoveMaximizedWindowFast(window, targetScreen, normalTargetRectangle, trace, out failureReason);
+                }
+
                 return MoveMaximizedWindow(window, targetScreen, placement, normalTargetRectangle, useNovelAiSafeRestore, trace, out failureReason);
             }
 
@@ -583,6 +594,42 @@ namespace MonitorSwap.Services
             if (!ValidateWindowReachedTarget(window, targetScreen, targetRectangle, false, trace, "validate-maximized"))
             {
                 failureReason = "maximized validation failed";
+                return false;
+            }
+
+            return true;
+        }
+
+        private static bool MoveMaximizedWindowFast(
+            CapturedWindow window,
+            Screen targetScreen,
+            Rectangle targetRectangle,
+            RotationTraceService.RotationTraceSession trace,
+            out string failureReason)
+        {
+            failureReason = null;
+            var hWnd = window.Handle;
+            var placement = window.Placement;
+            placement.length = Marshal.SizeOf(typeof(WINDOWPLACEMENT));
+            placement.showCmd = NativeMethods.SwShowNormal;
+            placement.rcNormalPosition = NativeMethods.FromRectangle(targetRectangle);
+
+            trace.Write(
+                "move-maximized-fast handle=0x{0:X} target={1} rect={2}",
+                hWnd.ToInt64(),
+                targetScreen.DeviceName,
+                FormatRectangle(targetRectangle));
+
+            if (!SetWindowPlacementWithLogging(hWnd, ref placement, trace, "move-maximized-fast-placement-normal", out failureReason))
+            {
+                return false;
+            }
+
+            ShowWindowWithLogging(hWnd, NativeMethods.SwShowMaximized, trace, "move-maximized-fast-show");
+
+            if (!ValidateWindowReachedTarget(window, targetScreen, targetRectangle, false, trace, "validate-maximized-fast"))
+            {
+                failureReason = "fast maximized validation failed";
                 return false;
             }
 

@@ -11,6 +11,7 @@ namespace MonitorSwap.Models
         {
             IncludedMonitorIds = new List<string>();
             IncludedMonitorDeviceNames = new List<string>();
+            WindowExclusionRules = new List<WindowExclusionRule>();
             IncludeMinimizedWindows = true;
             RotateLeftHotkey = HotkeyBinding.CreateDefault(Keys.Left);
             RotateRightHotkey = HotkeyBinding.CreateDefault(Keys.Right);
@@ -45,6 +46,9 @@ namespace MonitorSwap.Models
         public bool CompatibilityDefaultsInitialized { get; set; }
 
         [DataMember]
+        public bool ExclusionDefaultsInitialized { get; set; }
+
+        [DataMember]
         public string UiLanguageCode { get; set; }
 
         [DataMember]
@@ -52,6 +56,9 @@ namespace MonitorSwap.Models
 
         [DataMember]
         public List<string> IncludedMonitorDeviceNames { get; set; }
+
+        [DataMember]
+        public List<WindowExclusionRule> WindowExclusionRules { get; set; }
 
         [DataMember]
         public HotkeyBinding RotateLeftHotkey { get; set; }
@@ -63,6 +70,8 @@ namespace MonitorSwap.Models
         {
             IncludedMonitorIds = IncludedMonitorIds ?? new List<string>();
             IncludedMonitorDeviceNames = IncludedMonitorDeviceNames ?? new List<string>();
+            WindowExclusionRules = WindowExclusionRules ?? new List<WindowExclusionRule>();
+            WindowExclusionRules.RemoveAll(rule => rule == null);
             RotateLeftHotkey = RotateLeftHotkey ?? HotkeyBinding.CreateDefault(Keys.Left);
             RotateRightHotkey = RotateRightHotkey ?? HotkeyBinding.CreateDefault(Keys.Right);
             if (!CompatibilityDefaultsInitialized)
@@ -70,6 +79,12 @@ namespace MonitorSwap.Models
                 EnableBrowserCompatibilityMode = true;
                 EnableRotationDiagnostics = false;
                 CompatibilityDefaultsInitialized = true;
+            }
+
+            if (!ExclusionDefaultsInitialized)
+            {
+                WindowExclusionRules.Add(WindowExclusionRule.CreateDefaultCodexPetRule());
+                ExclusionDefaultsInitialized = true;
             }
         }
 
@@ -85,9 +100,11 @@ namespace MonitorSwap.Models
                 SkipBrowserFullscreenWindows = SkipBrowserFullscreenWindows,
                 EnableRotationDiagnostics = EnableRotationDiagnostics,
                 CompatibilityDefaultsInitialized = CompatibilityDefaultsInitialized,
+                ExclusionDefaultsInitialized = ExclusionDefaultsInitialized,
                 UiLanguageCode = UiLanguageCode,
                 IncludedMonitorIds = new List<string>(IncludedMonitorIds ?? new List<string>()),
                 IncludedMonitorDeviceNames = new List<string>(IncludedMonitorDeviceNames ?? new List<string>()),
+                WindowExclusionRules = CloneExclusionRules(WindowExclusionRules),
                 RotateLeftHotkey = RotateLeftHotkey != null ? RotateLeftHotkey.Clone() : null,
                 RotateRightHotkey = RotateRightHotkey != null ? RotateRightHotkey.Clone() : null
             };
@@ -101,6 +118,96 @@ namespace MonitorSwap.Models
         public void SetUiLanguage(AppLanguage language)
         {
             UiLanguageCode = language.ToCode();
+        }
+
+        private static List<WindowExclusionRule> CloneExclusionRules(IEnumerable<WindowExclusionRule> rules)
+        {
+            var clonedRules = new List<WindowExclusionRule>();
+            if (rules == null)
+            {
+                return clonedRules;
+            }
+
+            foreach (var rule in rules)
+            {
+                if (rule != null)
+                {
+                    clonedRules.Add(rule.Clone());
+                }
+            }
+
+            return clonedRules;
+        }
+    }
+
+    [DataContract]
+    internal sealed class WindowExclusionRule
+    {
+        [DataMember]
+        public string Name { get; set; }
+
+        [DataMember]
+        public bool Disabled { get; set; }
+
+        [DataMember]
+        public string ProcessName { get; set; }
+
+        [DataMember]
+        public string ClassName { get; set; }
+
+        [DataMember]
+        public string WindowTitle { get; set; }
+
+        [DataMember]
+        public bool RequireTopMost { get; set; }
+
+        [DataMember]
+        public bool RequireNoActivate { get; set; }
+
+        [DataMember]
+        public int MaxWidth { get; set; }
+
+        [DataMember]
+        public int MaxHeight { get; set; }
+
+        public WindowExclusionRule Clone()
+        {
+            return new WindowExclusionRule
+            {
+                Name = Name,
+                Disabled = Disabled,
+                ProcessName = ProcessName,
+                ClassName = ClassName,
+                WindowTitle = WindowTitle,
+                RequireTopMost = RequireTopMost,
+                RequireNoActivate = RequireNoActivate,
+                MaxWidth = MaxWidth,
+                MaxHeight = MaxHeight
+            };
+        }
+
+        public bool HasAnyMatchCondition()
+        {
+            return !string.IsNullOrWhiteSpace(ProcessName) ||
+                   !string.IsNullOrWhiteSpace(ClassName) ||
+                   !string.IsNullOrWhiteSpace(WindowTitle) ||
+                   RequireTopMost ||
+                   RequireNoActivate ||
+                   MaxWidth > 0 ||
+                   MaxHeight > 0;
+        }
+
+        public static WindowExclusionRule CreateDefaultCodexPetRule()
+        {
+            return new WindowExclusionRule
+            {
+                Name = "Codex pet",
+                ProcessName = "Codex",
+                ClassName = "Chrome_WidgetWin_1",
+                WindowTitle = "Codex",
+                RequireTopMost = true,
+                RequireNoActivate = true
+            };
         }
     }
 

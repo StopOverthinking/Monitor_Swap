@@ -48,13 +48,14 @@ namespace MonitorSwap.Services
             using (var trace = _traceService.BeginSession(settings, direction))
             {
                 trace.Write(
-                    "rotate-request direction={0} includeMinimized={1} preserveOrder={2} fastMode={3} browserCompatibility={4} skipBrowserFullscreen={5}",
+                    "rotate-request direction={0} includeMinimized={1} preserveOrder={2} fastMode={3} browserCompatibility={4} skipBrowserFullscreen={5} exclusionRules={6}",
                     direction,
                     settings.IncludeMinimizedWindows,
                     settings.PreserveWindowOrder,
                     settings.EnableFastMode,
                     settings.EnableBrowserCompatibilityMode,
-                    settings.SkipBrowserFullscreenWindows);
+                    settings.SkipBrowserFullscreenWindows,
+                    CountActiveExclusionRules(settings.WindowExclusionRules));
 
                 var includedScreens = GetIncludedScreens(settings);
                 trace.Write(
@@ -67,7 +68,7 @@ namespace MonitorSwap.Services
                     return RotationResult.Failed("Select at least two monitors to rotate windows.");
                 }
 
-                var windows = CaptureWindows(includedScreens, settings.IncludeMinimizedWindows, trace).ToList();
+                var windows = CaptureWindows(includedScreens, settings.IncludeMinimizedWindows, settings.WindowExclusionRules, trace).ToList();
                 trace.Write("captured-window-count={0}", windows.Count);
                 if (windows.Count == 0)
                 {
@@ -121,11 +122,11 @@ namespace MonitorSwap.Services
                         failureReason);
                 }
 
-                if (settings.PreserveWindowOrder && !settings.EnableFastMode)
+                if (settings.PreserveWindowOrder && ShouldRestoreWindowOrder(settings, windows, trace))
                 {
                     RestoreWindowOrder(windows, trace);
                 }
-                else if (settings.PreserveWindowOrder && settings.EnableFastMode)
+                else if (settings.PreserveWindowOrder)
                 {
                     trace.Write("skip-restore-order reason=fast-mode");
                 }
@@ -176,6 +177,7 @@ namespace MonitorSwap.Services
         private static IEnumerable<CapturedWindow> CaptureWindows(
             IReadOnlyList<Screen> includedScreens,
             bool includeMinimized,
+            IEnumerable<WindowExclusionRule> exclusionRules,
             RotationTraceService.RotationTraceSession trace)
         {
             var screensByName = includedScreens.ToDictionary(screen => screen.DeviceName, StringComparer.OrdinalIgnoreCase);
@@ -193,6 +195,16 @@ namespace MonitorSwap.Services
                     CapturedWindow snapshot;
                     if (!TryCreateSnapshot(hWnd, zOrder++, screensByName, out snapshot))
                     {
+                        return true;
+                    }
+
+                    WindowExclusionRule matchingRule;
+                    if (TryFindMatchingExclusionRule(snapshot, exclusionRules, out matchingRule))
+                    {
+                        trace.Write(
+                            "excluded-by-rule rule=\"{0}\" {1}",
+                            Truncate(GetExclusionRuleDisplayName(matchingRule), 80),
+                            DescribeWindow(snapshot));
                         return true;
                     }
 
@@ -323,10 +335,108 @@ namespace MonitorSwap.Services
                 IsMaximized = isMaximized,
                 IsFullScreen = !isMaximized && IsFullScreenWindow(windowRectangle, includedScreen.Bounds),
                 IsTopMost = (exStyle & NativeMethods.WsExTopMost) != 0,
+                IsNoActivate = (exStyle & NativeMethods.WsExNoActivate) != 0,
                 ClassName = className,
                 IsChromiumWindow = IsChromiumWindow(className, processName)
             };
             return true;
+        }
+
+        private static int CountActiveExclusionRules(IEnumerable<WindowExclusionRule> exclusionRules)
+        {
+            return exclusionRules == null
+                ? 0
+                : exclusionRules.Count(rule => rule != null && !rule.Disabled && rule.HasAnyMatchCondition());
+        }
+
+        private static bool TryFindMatchingExclusionRule(
+            CapturedWindow window,
+            IEnumerable<WindowExclusionRule> exclusionRules,
+            out WindowExclusionRule matchingRule)
+        {
+            matchingRule = null;
+            if (window == null || exclusionRules == null)
+            {
+                return false;
+            }
+
+            foreach (var rule in exclusionRules)
+            {
+                if (RuleMatchesWindow(rule, window))
+                {
+                    matchingRule = rule;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool RuleMatchesWindow(WindowExclusionRule rule, CapturedWindow window)
+        {
+            if (rule == null || rule.Disabled || !rule.HasAnyMatchCondition())
+            {
+                return false;
+            }
+
+            if (!MatchesExactCondition(rule.ProcessName, window.ProcessName))
+            {
+                return false;
+            }
+
+            if (!MatchesExactCondition(rule.ClassName, window.ClassName))
+            {
+                return false;
+            }
+
+            if (!MatchesTitleCondition(rule.WindowTitle, window.WindowTitle))
+            {
+                return false;
+            }
+
+            if (rule.RequireTopMost && !window.IsTopMost)
+            {
+                return false;
+            }
+
+            if (rule.RequireNoActivate && !window.IsNoActivate)
+            {
+                return false;
+            }
+
+            if (rule.MaxWidth > 0 && window.WindowRectangle.Width > rule.MaxWidth)
+            {
+                return false;
+            }
+
+            if (rule.MaxHeight > 0 && window.WindowRectangle.Height > rule.MaxHeight)
+            {
+                return false;
+            }
+
+            return true;
+        }
+
+        private static bool MatchesExactCondition(string condition, string value)
+        {
+            return string.IsNullOrWhiteSpace(condition) ||
+                   string.Equals(condition.Trim(), value ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool MatchesTitleCondition(string condition, string value)
+        {
+            return string.IsNullOrWhiteSpace(condition) ||
+                   (value ?? string.Empty).IndexOf(condition.Trim(), StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private static string GetExclusionRuleDisplayName(WindowExclusionRule rule)
+        {
+            if (rule == null || string.IsNullOrWhiteSpace(rule.Name))
+            {
+                return "<unnamed>";
+            }
+
+            return rule.Name;
         }
 
         private static bool TryGetEffectiveRectangle(IntPtr hWnd, WINDOWPLACEMENT placement, out Rectangle rectangle)
@@ -411,7 +521,7 @@ namespace MonitorSwap.Services
             // Preserve maximize semantics before handling true borderless fullscreen windows.
             if (window.IsMaximized)
             {
-                var useNovelAiSafeRestore = useBrowserCompatibilityMode && IsNovelAiWindow(window);
+                var useNovelAiSafeRestore = IsNovelAiWindow(window);
                 if (settings.EnableFastMode && !window.IsChromiumWindow && !RequiresSurfaceReset(window))
                 {
                     return MoveMaximizedWindowFast(window, targetScreen, normalTargetRectangle, trace, out failureReason);
@@ -767,6 +877,30 @@ namespace MonitorSwap.Services
                 RestoreWindowOrderForBand(group.Where(window => !window.IsTopMost).OrderBy(window => window.ZOrder).ToList(), false, trace);
                 RestoreWindowOrderForBand(group.Where(window => window.IsTopMost).OrderBy(window => window.ZOrder).ToList(), true, trace);
             }
+        }
+
+        private static bool ShouldRestoreWindowOrder(
+            AppSettings settings,
+            IReadOnlyList<CapturedWindow> windows,
+            RotationTraceService.RotationTraceSession trace)
+        {
+            if (!settings.EnableFastMode)
+            {
+                return true;
+            }
+
+            var hasCompatibilitySensitiveWindow = windows.Any(window =>
+                window.WasMoved &&
+                !window.IsMinimized &&
+                (window.IsChromiumWindow || RequiresSurfaceReset(window) || IsNovelAiWindow(window)));
+
+            if (hasCompatibilitySensitiveWindow)
+            {
+                trace.Write("restore-order reason=fast-mode-compatibility-sensitive-window");
+                return true;
+            }
+
+            return false;
         }
 
         private static void RestoreWindowOrderForBand(
@@ -1136,7 +1270,6 @@ namespace MonitorSwap.Services
         private static bool IsNovelAiWindow(CapturedWindow window)
         {
             return window != null &&
-                   window.IsChromiumWindow &&
                    !string.IsNullOrWhiteSpace(window.WindowTitle) &&
                    window.WindowTitle.IndexOf("NovelAI", StringComparison.OrdinalIgnoreCase) >= 0;
         }
@@ -1179,13 +1312,15 @@ namespace MonitorSwap.Services
         private static string DescribeWindow(CapturedWindow window)
         {
             return string.Format(
-                "handle=0x{0:X} pid={1} process={2} class={3} fullscreen={4} maximized={5} rect={6} screen={7} title=\"{8}\"",
+                "handle=0x{0:X} pid={1} process={2} class={3} fullscreen={4} maximized={5} topmost={6} noactivate={7} rect={8} screen={9} title=\"{10}\"",
                 window.Handle.ToInt64(),
                 window.ProcessId,
                 string.IsNullOrWhiteSpace(window.ProcessName) ? "<unknown>" : window.ProcessName,
                 string.IsNullOrWhiteSpace(window.ClassName) ? "<none>" : window.ClassName,
                 window.IsFullScreen,
                 window.IsMaximized,
+                window.IsTopMost,
+                window.IsNoActivate,
                 FormatRectangle(window.WindowRectangle),
                 window.SourceScreen.DeviceName,
                 Truncate(window.WindowTitle, 80));
@@ -1257,6 +1392,8 @@ namespace MonitorSwap.Services
             public bool IsFullScreen { get; set; }
 
             public bool IsTopMost { get; set; }
+
+            public bool IsNoActivate { get; set; }
 
             public bool WasMoved { get; set; }
 

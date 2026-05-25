@@ -11,7 +11,9 @@ Monitor Swap의 변경 기록과 작업 맥락을 남기는 공간입니다.
 
 ## Index
 
+- [2026-05-25 - Window exclusion rules](2026-05-25-window-exclusion-rules.md)
+- [2026-05-09 - Godot surface-backed wiki note](2026-05-09-godot-surface-backed-wiki-note.md)
+- [2026-05-09 - NovelAI safe restore regression guard](2026-05-09-novelai-safe-restore-regression-guard.md)
 - [2026-05-09 - Documentation workspace setup](2026-05-09-docs-workspace.md)
 
 새 항목은 [template.md](template.md)를 복사해 시작합니다.
-
